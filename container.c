@@ -18,11 +18,12 @@ char* const container_args[] = {
     NULL
 };
 
-static int container_func(void *arg)
+static int container_func(void *hostname)
 {
     pid_t pid = getpid();
     printf("Container[%d] - inside the container!\n", pid);
 
+    sethostname(hostname, strlen(hostname));
     // 用一个新的bash来替换掉当前子进程，
     // 这样我们就能通过 bash 查看当前子进程的情况.
     // bash退出后，子进程执行完毕
@@ -37,6 +38,14 @@ static int container_func(void *arg)
 
 int main(int argc, char *argv[])
 {
+    char *hostname;
+
+    if (argc < 2) {
+        hostname = "container";
+    } else {
+        hostname = argv[1];
+    }
+
     pid_t pid = getpid();
     printf("Parent[%d] - create a container!\n", pid);
 
@@ -45,8 +54,8 @@ int main(int argc, char *argv[])
                     container_stack + sizeof(container_stack),
                     // CLONE_NEWUTS表示创建新的UTS namespace，
                     // 这里SIGCHLD是子进程退出后返回给父进程的信号，跟namespace无关
-                    SIGCHLD,
-                    NULL);  // 传给child_func的参数
+                    CLONE_NEWUTS | SIGCHLD,
+                    hostname);  // 传给child_func的参数
     errExit(child_pid, "clone");
 
     waitpid(child_pid, NULL, 0); // 等待子进程结束
