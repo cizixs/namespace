@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <sched.h>
 #include <sys/wait.h>
+#include <sys/utsname.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -20,10 +21,22 @@ char* const container_args[] = {
 
 static int container_func(void *hostname)
 {
+
     pid_t pid = getpid();
     printf("Container[%d] - inside the container!\n", pid);
 
-    sethostname(hostname, strlen(hostname));
+    // 使用 sethostname 设置子进程的 hostname 信息
+    struct utsname uts;
+    if (sethostname(hostname, strlen(hostname)) == -1) {
+        errExit(-1, "sethostname")
+    };
+
+    // 使用 uname 获取子进程的机器信息，并打印 hostname 出来
+    if (uname(&uts) == -1){
+        errExit(-1, "uname")
+    }
+    printf("Container[%d] - container uts.nodename: [%s]!\n", pid, uts.nodename);
+
     // 用一个新的bash来替换掉当前子进程，
     // 这样我们就能通过 bash 查看当前子进程的情况.
     // bash退出后，子进程执行完毕
@@ -47,8 +60,15 @@ int main(int argc, char *argv[])
     }
 
     pid_t pid = getpid();
-    printf("Parent[%d] - create a container!\n", pid);
 
+    // 打印父进程的 hostname 信息
+    struct utsname uts;
+    if (uname(&uts) == -1){
+        errExit(-1, "uname")
+    }
+    printf("Parent[%d] - parent uts.nodename: [%s]!\n", pid, uts.nodename);
+
+    printf("Parent[%d] - create a container!\n", pid);
     // 创建并启动子进程，调用该函数后，父进程将继续往后执行，也就是执行后面的waitpid
     pid_t child_pid = clone(container_func,  // 子进程将执行container_func这个函数
                     container_stack + sizeof(container_stack),
