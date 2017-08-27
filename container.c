@@ -31,6 +31,12 @@ static int container_func(void *hostname)
         errExit(-1, "sethostname")
     };
 
+    // 使用 uname 获取子进程的机器信息，并打印 hostname 出来
+    if (uname(&uts) == -1){
+        errExit(-1, "uname")
+    }
+    printf("Container[%d] - container uts.nodename: [%s]!\n", pid, uts.nodename);
+
     // 用一个新的bash来替换掉当前子进程，
     // 这样我们就能通过 bash 查看当前子进程的情况.
     // bash退出后，子进程执行完毕
@@ -55,13 +61,20 @@ int main(int argc, char *argv[])
 
     pid_t pid = getpid();
 
+    // 打印父进程的 hostname 信息
+    struct utsname uts;
+    if (uname(&uts) == -1){
+        errExit(-1, "uname")
+    }
+    printf("Parent[%d] - parent uts.nodename: [%s]!\n", pid, uts.nodename);
+
     printf("Parent[%d] - create a container!\n", pid);
     // 创建并启动子进程，调用该函数后，父进程将继续往后执行，也就是执行后面的waitpid
     pid_t child_pid = clone(container_func,  // 子进程将执行container_func这个函数
                     container_stack + sizeof(container_stack),
                     // CLONE_NEWUTS表示创建新的UTS namespace，
                     // 这里SIGCHLD是子进程退出后返回给父进程的信号，跟namespace无关
-                    CLONE_NEWUTS | CLONE_NEWIPC | SIGCHLD,
+                    CLONE_NEWUTS | SIGCHLD,
                     hostname);  // 传给child_func的参数
     errExit(child_pid, "clone");
 
