@@ -21,7 +21,6 @@ char* const container_args[] = {
 
 static int container_func(void *hostname)
 {
-
     pid_t pid = getpid();
     printf("Container[%d] - inside the container!\n", pid);
 
@@ -68,16 +67,14 @@ int main(int argc, char *argv[])
     }
     printf("Parent[%d] - parent uts.nodename: [%s]!\n", pid, uts.nodename);
 
-    printf("Parent[%d] - create a container!\n", pid);
     // 创建并启动子进程，调用该函数后，父进程将继续往后执行，也就是执行后面的waitpid
     pid_t child_pid = clone(container_func,  // 子进程将执行container_func这个函数
                     container_stack + sizeof(container_stack),
                     // CLONE_NEWUTS表示创建新的UTS namespace，
                     // 这里SIGCHLD是子进程退出后返回给父进程的信号，跟namespace无关
-                    CLONE_NEWUTS | SIGCHLD,
+                    CLONE_NEWUTS | CLONE_NEWPID | SIGCHLD,
                     hostname);  // 传给child_func的参数
     errExit(child_pid, "clone");
-
     waitpid(child_pid, NULL, 0); // 等待子进程结束
 
     printf("Parent[%d] - container exited!\n", pid);
