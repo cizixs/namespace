@@ -28,16 +28,23 @@ static int container_func(void *hostname)
     // 使用 sethostname 设置子进程的 hostname 信息
     struct utsname uts;
     if (sethostname(hostname, strlen(hostname)) == -1) {
-        errExit(-1, "sethostname")
+        errExit(-1, "sethostname");
     };
 
     // mount /proc directory 
     system("mount --make-private /proc");
-    mount("proc", "/proc", "proc", 0, NULL);
+    if (mount("proc", "/proc", "proc", 0, NULL) != 0) {
+        errExit(-1, "proc");
+    };
+
+    system("mount --make-private /tmp");
+    if (mount("tmpfs", "/tmp", "tmpfs", 0, NULL) != 0){
+        errExit(-1, "tmp");
+    };
 
     // 使用 uname 获取子进程的机器信息，并打印 hostname 出来
     if (uname(&uts) == -1){
-        errExit(-1, "uname")
+        errExit(-1, "uname");
     }
     printf("Container[%d] - container uts.nodename: [%s]!\n", pid, uts.nodename);
 
