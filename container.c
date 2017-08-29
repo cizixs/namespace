@@ -59,7 +59,6 @@ static int container_func(void *hostname)
     return 1;
 }
 
-
 int main(int argc, char *argv[])
 {
     char *hostname;
@@ -84,7 +83,7 @@ int main(int argc, char *argv[])
                     container_stack + sizeof(container_stack),
                     // CLONE_NEWUTS表示创建新的UTS namespace，
                     // 这里SIGCHLD是子进程退出后返回给父进程的信号，跟namespace无关
-                    CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
+                    CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWIPC | SIGCHLD,
                     hostname);  // 传给child_func的参数
     errExit(child_pid, "clone");
     waitpid(child_pid, NULL, 0); // 等待子进程结束
