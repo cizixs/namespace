@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <sched.h>
 #include <sys/wait.h>
+#include <sys/mount.h>
 #include <sys/utsname.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,10 @@ static int container_func(void *hostname)
     if (sethostname(hostname, strlen(hostname)) == -1) {
         errExit(-1, "sethostname")
     };
+
+    // mount /proc directory 
+    system("mount --make-private /proc");
+    mount("proc", "/proc", "proc", 0, NULL);
 
     // 使用 uname 获取子进程的机器信息，并打印 hostname 出来
     if (uname(&uts) == -1){
@@ -72,7 +77,7 @@ int main(int argc, char *argv[])
                     container_stack + sizeof(container_stack),
                     // CLONE_NEWUTS表示创建新的UTS namespace，
                     // 这里SIGCHLD是子进程退出后返回给父进程的信号，跟namespace无关
-                    CLONE_NEWUTS | CLONE_NEWPID | SIGCHLD,
+                    CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
                     hostname);  // 传给child_func的参数
     errExit(child_pid, "clone");
     waitpid(child_pid, NULL, 0); // 等待子进程结束
