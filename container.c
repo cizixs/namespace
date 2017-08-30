@@ -5,6 +5,7 @@
 #include <sys/utsname.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -20,8 +21,44 @@ char* const container_args[] = {
     NULL
 };
 
-static int container_func(void *hostname)
+struct child_args {
+    char *hostname;  /*container hostname to use */
+    int pipe_fd[2];
+};
+
+void update_map(char *file, int inside_id, int outside_id, int len) {
+    FILE *mapfd = fopen(file, "w");
+    if (mapfd == NULL) {
+        errExit(-1, "open user map");
+    }
+    fprintf(mapfd, "%d %d %d", inside_id, outside_id, len);
+    fclose(mapfd);
+}
+
+void update_uid_map(pid_t pid, int inside_id, int outside_id, int len) {
+    char map_path[PATH_MAX];
+    sprintf(map_path, "/proc/%ld/uid_map", (long) pid);
+    update_map(map_path, inside_id, outside_id, len);
+}
+
+void update_gid_map(pid_t pid, int inside_id, int outside_id, int len) {
+    char map_path[PATH_MAX];
+    sprintf(map_path, "/proc/%ld/gid_map", (long) pid);
+    update_map(map_path, inside_id, outside_id, len);
+}
+
+static int container_func(void *arg)
 {
+    struct child_args *args = (struct child_args *) arg;
+    char *hostname = args->hostname;
+
+    // wait for parent has updated UID and GID mapping
+    char ch;
+    close(args->pipe_fd[1]);
+    if (read(args->pipe_fd[0], &ch, 1) != 0) {
+        errExit(-1, "read pipe");
+    }
+
     pid_t pid = getpid();
     printf("Container[%d] - inside the container!\n", pid);
 
@@ -62,6 +99,7 @@ static int container_func(void *hostname)
 int main(int argc, char *argv[])
 {
     char *hostname;
+    struct child_args args;
 
     if (argc < 2) {
         hostname = "container";
@@ -69,6 +107,12 @@ int main(int argc, char *argv[])
         hostname = argv[1];
     }
 
+    args.hostname = hostname;
+    if (pipe(args.pipe_fd) == -1) {
+        errExit(-1, "pipe");
+    }
+
+    // current process pid
     pid_t pid = getpid();
 
     // 打印父进程的 hostname 信息
@@ -83,9 +127,17 @@ int main(int argc, char *argv[])
                     container_stack + sizeof(container_stack),
                     // CLONE_NEWUTS表示创建新的UTS namespace，
                     // 这里SIGCHLD是子进程退出后返回给父进程的信号，跟namespace无关
-                    CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWIPC | SIGCHLD,
-                    hostname);  // 传给child_func的参数
+                    CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWIPC | CLONE_NEWUSER | SIGCHLD,
+                    &args);  // 传给child_func的参数
     errExit(child_pid, "clone");
+
+    // Update UID and GID map in the child
+    const int uid=getuid(), gid=getgid();
+    update_uid_map(child_pid, 0, uid, 1);
+    update_gid_map(child_pid, 0, gid, 1);
+    printf("Parent[%d] - user and group id mapping done...", pid);
+    close(args.pipe_fd[1]);
+
     waitpid(child_pid, NULL, 0); // 等待子进程结束
 
     printf("Parent[%d] - container exited!\n", pid);
